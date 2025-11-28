@@ -5,16 +5,19 @@ FROM --platform=${PLATFORM} debian:trixie-slim AS build
 
 ARG GIT_REPO_URL
 ENV GIT_REPO_URL=${GIT_REPO_URL}
-ARG GIT_BRANCH
-ENV GIT_BRANCH=${GIT_BRANCH}
 
+ARG RAILWAY_GIT_BRANCH
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
+ENV RAILWAY_GIT_BRANCH=${RAILWAY_GIT_BRANCH}
+
+RUN echo "Cache bust: ${RAILWAY_GIT_COMMIT_SHA}"
 RUN echo "GIT_REPO_URL: ${GIT_REPO_URL}"
-RUN echo "GIT_BRANCH: ${GIT_BRANCH}"
+RUN echo "GIT_BRANCH: ${RAILWAY_GIT_BRANCH}"
 
 # Copy the project files
-RUN apt-get update && apt-get install -y curl git bash 
-
-RUN git clone --depth=1 --single-branch --branch ${GIT_BRANCH} ${GIT_REPO_URL}
+RUN apt-get update && apt-get install -y curl git bash
+RUN git clone --depth=1 --single-branch --branch ${RAILWAY_GIT_BRANCH} ${GIT_REPO_URL}
 
 # Manually clone submodules
 RUN mkdir -p lib/forge-std && \
@@ -34,10 +37,12 @@ RUN /root/.foundry/bin/forge build
 
 FROM --platform=${PLATFORM} debian:trixie-slim AS runtime
 
-RUN apt-get update && apt-get install -y adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
+
 
 COPY --from=build /mewler-liquidation-bot /app
 
+RUN apt-get update && apt-get install -y gnupg adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
+RUN curl -Ls https://cli.doppler.com/install.sh | sh
 RUN mkdir -p /app/logs /app/state
 
 WORKDIR /app
@@ -70,6 +75,4 @@ USER appuser
 
 EXPOSE 8080
 
-# CMD ["python", "python/liquidation_bot.py"]
-# Run the application
-CMD [".venv/bin/gunicorn", "--bind", "0.0.0.0:8080", "application:application"]
+CMD ["doppler", "run", "--", ".venv/bin/gunicorn", "--bind", "0.0.0.0:8080", "application:application"]
