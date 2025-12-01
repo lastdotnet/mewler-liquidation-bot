@@ -35,14 +35,15 @@ RUN /root/.foundry/bin/forge build
 
 FROM --platform=${PLATFORM} debian:trixie-slim AS runtime
 
+RUN apt-get update && apt-get install -y gnupg adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
+RUN curl -Ls https://cli.doppler.com/install.sh | sh
+
+
 COPY --from=build /mewler-liquidation-bot /app
 
 RUN apt-get update && apt-get install -y curl gnupg adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
 RUN curl -Ls https://cli.doppler.com/install.sh | sh
 RUN PATH=$PATH:/usr/bin/
-
-RUN echo "Doppler installed: $(which doppler)"
-RUN doppler --version
 
 RUN mkdir -p /app/logs /app/state
 
