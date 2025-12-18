@@ -84,7 +84,7 @@ MAINNET_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 RISK_DASHBOARD_URL=https://your-dashboard-url.com
 
-# GlueX API (if using GlueX swaps)
+# GlueX API (REQUIRED for GlueX swaps - the bot uses GlueX by default)
 GLUEX_API_URL=https://api.gluex.com
 GLUEX_API_KEY=your-api-key
 GLUEX_UNIQUE_PID=your-unique-pid
@@ -94,8 +94,13 @@ GLUEX_UNIQUE_PID=your-unique-pid
 
 The `app/config.yaml` file should already have chain configurations. Make sure:
 - Contract addresses are correct for your chain
+  - `LIQUIDATOR_CONTRACT`: Address of the deployed Liquidator contract
+  - `GLUEX_ROUTER`: Address of the GlueX router (required for GlueX swaps)
+  - `EVC`, `SWAPPER`, `SWAP_VERIFIER`: EVK contract addresses
+  - `WETH`, `PYTH`: Other relevant contract addresses
 - ABI paths point to the correct compiled contract files
 - Chain-specific settings match your deployment
+- `EVC_DEPLOYMENT_BLOCK`: The block number when EVC was deployed (used for initial event scanning)
 
 ### 4. Update Chain IDs in `app/__init__.py`
 
@@ -108,7 +113,7 @@ chain_ids = [999]  # Change to your desired chain ID(s)
 
 ### 5. Configure Bot Behavior
 
-In `app/liquidation/routes.py`, you can control bot behavior:
+In `app/liquidation/routes.py`, you can control bot behavior in the `start_monitor` function:
 
 ```python
 chain_manager = ChainManager(chain_ids, notify=True, execute_liquidation=False)
@@ -116,6 +121,7 @@ chain_manager = ChainManager(chain_ids, notify=True, execute_liquidation=False)
 
 - `notify=True`: Send Slack notifications (requires SLACK_WEBHOOK_URL)
 - `execute_liquidation=False`: Set to `True` to actually execute liquidations (be careful!)
+  - **Default is `True`** - Make sure to set this to `False` for testing!
 
 ## Running the Bot
 
@@ -173,6 +179,21 @@ cd lib/evk-periphery && forge build && cd ../..
 mkdir -p logs state
 ```
 
+### Validating Python Code
+
+Python is an interpreted language and doesn't need compilation, but you can check for syntax errors:
+
+```bash
+# Check for syntax errors in the main file
+python3 -m py_compile app/liquidation/liquidation_bot.py
+
+# Or check all Python files
+find app -name "*.py" -exec python3 -m py_compile {} \;
+
+# Run pylint for code quality checks (if installed)
+pylint app/liquidation/liquidation_bot.py
+```
+
 ### Bot Not Finding Accounts
 
 - Check that `EVC_DEPLOYMENT_BLOCK` in `config.yaml` is correct
@@ -182,10 +203,12 @@ mkdir -p logs state
 ## Safety Notes
 
 ⚠️ **IMPORTANT**: 
-- Start with `execute_liquidation=False` to test monitoring without executing liquidations
-- Ensure your `LIQUIDATOR_PRIVATE_KEY` has sufficient funds for gas
+- **Start with `execute_liquidation=False`** in `app/liquidation/routes.py` to test monitoring without executing liquidations
+- The default value is `True`, so you must explicitly set it to `False` for testing
+- Ensure your `LIQUIDATOR_PRIVATE_KEY` has sufficient funds for gas (in the native token, e.g., HYPE for HyperEVM)
 - Test on testnets first if possible
 - Monitor the logs in the `logs/` directory
+- Verify all contract addresses in `config.yaml` are correct for your chain
 
 ## Logs and State
 
