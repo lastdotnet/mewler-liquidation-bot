@@ -28,13 +28,6 @@ WORKDIR mewler-liquidation-bot
 RUN curl -L https://foundry.paradigm.xyz | bash
 RUN /root/.foundry/bin/foundryup --install nightly
 
-RUN ls mewler-liquidation-bot
-WORKDIR mewler-liquidation-bot
-
-# Install Foundry
-RUN curl -L https://foundry.paradigm.xyz | bash
-RUN /root/.foundry/bin/foundryup --install nightly
-
 # Run Forge commands
 RUN /root/.foundry/bin/forge install
 RUN /root/.foundry/bin/forge update
