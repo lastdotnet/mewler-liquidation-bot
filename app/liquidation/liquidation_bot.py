@@ -1230,9 +1230,74 @@ class Liquidator:
 
         time.sleep(config.API_REQUEST_DELAY)
 
+        # Get GlueX router address from config
+        gluex_router = config.GLUEX_ROUTER
+        if not gluex_router:
+            logger.error("Liquidator: GLUEX_ROUTER not found in config")
+            return ({"profit": 0}, None)
+
+        # Wrap GlueX router calldata in ISwapper.swap(SwapParams) call
         swap_data = []
         for _, item in enumerate(swap_api_response["swap"]["multicallItems"]):
-            swap_data.append(item["data"])
+            gluex_calldata = item["data"]
+            
+            # Encode the GlueX router address + calldata in the data field
+            # Format: abi.encode(router_address, calldata_bytes)
+            router_address_bytes = bytes.fromhex(gluex_router[2:])  # Remove 0x prefix
+            gluex_calldata_bytes = bytes.fromhex(gluex_calldata[2:]) if gluex_calldata.startswith("0x") else bytes.fromhex(gluex_calldata)
+            
+            # ABI encode: (address, bytes)
+            encoded_data = config.w3.codec.encode(
+                ["address", "bytes"],
+                [gluex_router, gluex_calldata_bytes]
+            )
+            
+            # Create SwapParams struct
+            # handler: bytes32("Generic"), mode: 0 (exact input), account: swapper, 
+            # tokenIn: collateral_asset, tokenOut: borrowed_asset,
+            # vaultIn: collateral_vault, accountIn: swapper, accountOut: swapper,
+            # receiver: swapper, amountOut: 0 (ignored for exact input), data: encoded_data
+            handler_generic = config.w3.keccak(text="Generic")[:32]  # bytes32("Generic")
+            
+            swap_params = (
+                handler_generic,  # bytes32 handler
+                0,  # uint256 mode (0 = exact input)
+                config.SWAPPER,  # address account
+                collateral_asset,  # address tokenIn
+                borrowed_asset,  # address tokenOut
+                collateral_vault_address,  # address vaultIn
+                config.SWAPPER,  # address accountIn
+                config.SWAPPER,  # address accountOut
+                config.SWAPPER,  # address receiver
+                0,  # uint256 amountOut (ignored for exact input mode)
+                encoded_data  # bytes data
+            )
+            
+            # Encode swap(SwapParams) function call
+            # Function signature: swap((bytes32,uint256,address,address,address,address,address,address,address,uint256,bytes))
+            swap_call_data = config.w3.eth.contract(abi=[{
+                "name": "swap",
+                "type": "function",
+                "inputs": [{
+                    "name": "params",
+                    "type": "tuple",
+                    "components": [
+                        {"name": "handler", "type": "bytes32"},
+                        {"name": "mode", "type": "uint256"},
+                        {"name": "account", "type": "address"},
+                        {"name": "tokenIn", "type": "address"},
+                        {"name": "tokenOut", "type": "address"},
+                        {"name": "vaultIn", "type": "address"},
+                        {"name": "accountIn", "type": "address"},
+                        {"name": "accountOut", "type": "address"},
+                        {"name": "receiver", "type": "address"},
+                        {"name": "amountOut", "type": "uint256"},
+                        {"name": "data", "type": "bytes"}
+                    ]
+                }]
+            }]).encodeABI("swap", [swap_params])
+            
+            swap_data.append(swap_call_data)
 
         logger.info("Liquidator: Seized collateral assets: %s, output amount: %s, "
                     "leftover_borrow: %s", seized_collateral_assets, amount_out,

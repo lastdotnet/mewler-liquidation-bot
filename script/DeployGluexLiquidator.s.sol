@@ -20,7 +20,7 @@ contract DeployGluexLiquidator is Script {
 
         SwapVerifier swapVerifier = new SwapVerifier();
 
-        GluexGsmSwapper gluexGsmSwapper = new GluexGsmSwapper(EVC, deployer, GLUEX_ROUTER, GSM);
+        GluexGsmSwapper gluexGsmSwapper = new GluexGsmSwapper(EVC, deployer, GSM);
 
         GluexGsmLiquidator gluexGsmLiquidator = new GluexGsmLiquidator(deployer, address(gluexGsmSwapper), address(swapVerifier), EVC, PYTH);
         
