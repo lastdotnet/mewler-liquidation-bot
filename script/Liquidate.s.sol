@@ -22,17 +22,50 @@ contract Liquidate is Script {
 
         address deployer = vm.addr(vm.envUint("DEPLOYER_PRIVATE_KEY"));
 
-        vm.startPrank(deployer);
+        GluexGsmLiquidator gluexGsmLiquidator;
+        address swapperAddress;
+        GluexGsmSwapper gluexGsmSwapper;
 
-        SwapVerifier swapVerifier = new SwapVerifier();
-        GluexGsmSwapper gluexGsmSwapper = new GluexGsmSwapper(EVC, deployer, GSM);
-        GluexGsmLiquidator gluexGsmLiquidator = new GluexGsmLiquidator(deployer, address(gluexGsmSwapper), address(swapVerifier), EVC, PYTH);
+        // Check if LIQUIDATOR_ADDRESS env var exists
+        try vm.envAddress("LIQUIDATOR_ADDRESS") returns (address liquidatorAddr) {
+            // Use existing liquidator contract
+            console.log("Using existing liquidator at:", liquidatorAddr);
+            gluexGsmLiquidator = GluexGsmLiquidator(liquidatorAddr);
+            // Get swapper address from the liquidator contract
+            swapperAddress = gluexGsmLiquidator.swapperAddress();
+            console.log("Swapper address from liquidator:", swapperAddress);
+        } catch {
+            // Check if SWAPPER_ADDRESS env var exists
+            try vm.envAddress("SWAPPER_ADDRESS") returns (address swapperAddr) {
+                // Use existing swapper, deploy new liquidator
+                console.log("Using existing swapper at:", swapperAddr);
+                swapperAddress = swapperAddr;
+                gluexGsmSwapper = GluexGsmSwapper(swapperAddr);
+                
+                vm.startPrank(deployer);
+                SwapVerifier swapVerifier = new SwapVerifier();
+                gluexGsmLiquidator = new GluexGsmLiquidator(deployer, swapperAddress, address(swapVerifier), EVC, PYTH);
+                vm.stopPrank();
 
-        vm.stopPrank();
-        
-        // address swapperAddress = 0x7Ad9b79921D949C6dD6bA1384fE6884F9dFaFe09;
-        // address liquidatorContract = 0x7D1c33cfD2637b3112893F058Ca2bEaDEad0a9F4;
-        
+                console.log("Deployed new liquidator at:", address(gluexGsmLiquidator));
+                console.log("Using existing swapper at:", swapperAddress);
+            } catch {
+                // Deploy new contracts
+                console.log("LIQUIDATOR_ADDRESS and SWAPPER_ADDRESS not found, deploying new contracts");
+                vm.startPrank(deployer);
+
+                SwapVerifier swapVerifier = new SwapVerifier();
+                gluexGsmSwapper = new GluexGsmSwapper(EVC, deployer, GSM);
+                gluexGsmLiquidator = new GluexGsmLiquidator(deployer, address(gluexGsmSwapper), address(swapVerifier), EVC, PYTH);
+
+                vm.stopPrank();
+
+                swapperAddress = address(gluexGsmSwapper);
+                console.log("Deployed new liquidator at:", address(gluexGsmLiquidator));
+                console.log("Deployed new swapper at:", swapperAddress);
+            }
+        }
+
         // Get the current Swapper owner and transfer ownership to liquidator contract
         Ownable swapper = Ownable(address(gluexGsmSwapper));
         address currentOwner = swapper.owner();
@@ -41,6 +74,14 @@ contract Liquidate is Script {
         vm.startPrank(currentOwner);
         swapper.transferOwnership(address(gluexGsmLiquidator));
         vm.stopPrank();
+
+//         2025-12-19 06:02:31,213 - INFO - Liquidator: Handler bytes32: 0x3453b446d3286ae2686ce38071563c8524d9fc20f4b352e7e017a79fcbdbe658
+// 2025-12-19 06:02:31,213 - INFO - Liquidator: SwapParams - handler: 0x3453b446d3286ae2686ce38071563c8524d9fc20f4b352e7e017a79fcbdbe658, mode: 0, account: 0x23726d4Ca9A3768A5102A49522a157a5825E7db8, tokenIn: 0x94e8396e0869c9F2200760aF0621aFd240E1CF38, tokenOut: 0x111111a1a0667d36bD57c0A9f569b98057111111, vaultIn: 0x64a3052570F5A1c241C6c8cd32F8F9aD411e6990, accountIn: 0x23726d4Ca9A3768A5102A49522a157a5825E7db8, accountOut: 0x23726d4Ca9A3768A5102A49522a157a5825E7db8, receiver: 0x23726d4Ca9A3768A5102A49522a157a5825E7db8, amountOut: 0, data length: 2176
+        
+        // address swapperAddress = 0x7Ad9b79921D949C6dD6bA1384fE6884F9dFaFe09;
+        // address liquidatorContract = 0x7D1c33cfD2637b3112893F058Ca2bEaDEad0a9F4;
+        
+
         
         // Use startPrank to impersonate the liquidator EOA for the liquidation call
         address liquidatorEOA = vm.envAddress("LIQUIDATOR_EOA");

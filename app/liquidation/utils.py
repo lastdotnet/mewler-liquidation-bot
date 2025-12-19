@@ -347,7 +347,7 @@ def post_low_health_account_report(sorted_accounts, config: ChainConfig) -> None
 
     total_value = sum(value / 10**18 for _, _, _, _, value, _, _ in sorted_accounts)
 
-    message = ":warning: *Account Health Report* :warning:\n\n"
+    message = ":white_check_mark:  *Account Health Report* :white_check_mark: \n\n"
 
     if not low_health_accounts:
         message += f"No accounts with health score below `{config.SLACK_REPORT_HEALTH_SCORE}` detected.\n"

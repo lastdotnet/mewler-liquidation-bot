@@ -630,7 +630,7 @@ class AccountMonitor:
                 logger.info("AccountMonitor: State loaded from save"
                             " file %s from block %s to block %s",
                             save_path,
-                            self.config.EVC_DEPLOYMENT_BLOCK,
+                            self.config.EVC_START_BLOCK,
                             self.latest_block)
             elif not local_save:
                 # Load from remote location
@@ -937,9 +937,10 @@ class EVCListener:
                     else:
                         seen_accounts.add(account_address)
 
+                    block_number = log["blockNumber"]
                     logger.info("EVCListener: AccountStatusCheck event found for account %s "
-                                "with controller %s, triggering monitor update.",
-                                account_address, vault_address)
+                                "with controller %s at block %s, triggering monitor update.",
+                                account_address, vault_address, block_number)
 
                     try:
                         self.account_monitor.update_account_on_status_check_event(
@@ -975,7 +976,7 @@ class EVCListener:
         try:
             # If the account monitor has a saved state,
             # assume it has been loaded from that and start from the last saved block
-            start_block = max(int(self.config.EVC_DEPLOYMENT_BLOCK),
+            start_block = max(int(self.config.EVC_START_BLOCK),
                               self.account_monitor.last_saved_block)
 
             current_block = self.w3.eth.block_number
@@ -1073,7 +1074,7 @@ class Liquidator:
 
         max_profit_data = {
             "tx": None, 
-            "profit": 0,
+            "profit": -math.inf,
             "collateral_address": None,
             "collateral_asset": None,
             "leftover_borrow": 0, 
@@ -1243,7 +1244,6 @@ class Liquidator:
             
             # Encode the GlueX router address + calldata in the data field
             # Format: abi.encode(router_address, calldata_bytes)
-            router_address_bytes = bytes.fromhex(gluex_router[2:])  # Remove 0x prefix
             gluex_calldata_bytes = bytes.fromhex(gluex_calldata[2:]) if gluex_calldata.startswith("0x") else bytes.fromhex(gluex_calldata)
             
             # ABI encode: (address, bytes)
@@ -1255,9 +1255,10 @@ class Liquidator:
             # Create SwapParams struct
             # handler: bytes32("Generic"), mode: 0 (exact input), account: swapper, 
             # tokenIn: collateral_asset, tokenOut: borrowed_asset,
-            # vaultIn: collateral_vault, accountIn: swapper, accountOut: swapper,
+            # vaultIn: collateral_vault, accountIn: swapper,
             # receiver: swapper, amountOut: 0 (ignored for exact input), data: encoded_data
-            handler_generic = config.w3.keccak(text="Generic")[:32]  # bytes32("Generic")
+            # In Solidity, bytes32("Generic") pads the string to 32 bytes (not a hash)
+            handler_generic = ("Generic".encode('utf-8') + b'\x00' * (32 - len("Generic")))[:32]
             
             swap_params = (
                 handler_generic,  # bytes32 handler
@@ -1267,14 +1268,13 @@ class Liquidator:
                 borrowed_asset,  # address tokenOut
                 collateral_vault_address,  # address vaultIn
                 config.SWAPPER,  # address accountIn
-                config.SWAPPER,  # address accountOut
                 config.SWAPPER,  # address receiver
                 0,  # uint256 amountOut (ignored for exact input mode)
                 encoded_data  # bytes data
             )
             
             # Encode swap(SwapParams) function call
-            # Function signature: swap((bytes32,uint256,address,address,address,address,address,address,address,uint256,bytes))
+            # Function signature: swap((bytes32,uint256,address,address,address,address,address,address,uint256,bytes))
             swap_call_data = config.w3.eth.contract(abi=[{
                 "name": "swap",
                 "type": "function",
@@ -1289,7 +1289,6 @@ class Liquidator:
                         {"name": "tokenOut", "type": "address"},
                         {"name": "vaultIn", "type": "address"},
                         {"name": "accountIn", "type": "address"},
-                        {"name": "accountOut", "type": "address"},
                         {"name": "receiver", "type": "address"},
                         {"name": "amountOut", "type": "uint256"},
                         {"name": "data", "type": "bytes"}
@@ -1323,7 +1322,6 @@ class Liquidator:
         )
 
         logger.info("Liquidator: Liquidation params for account %s: %s", violator_address, params)
-        logger.info("Liquidator: Liquidation swap_data for account %s: %s", violator_address, swap_data)
 
         pyth_feed_ids = vault.pyth_feed_ids
 
@@ -1672,7 +1670,6 @@ class GluexQuoter:
                        "Router: %s, Estimated net surplus: %s, Block number: %s",
                        output_amount, min_output_amount, result.get("router"), 
                        result.get("estimatedNetSurplus"), block_number)
-            logger.info("GlueX: Calldata: %s", calldata)
             
             normalized_response = {
                 "amountOut": str(output_amount),

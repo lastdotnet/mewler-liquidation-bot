@@ -97,20 +97,17 @@ chains:
   999:
     # Config
     name: "HyperEVM"
-    EVC_DEPLOYMENT_BLOCK: 1980586
+    EVC_START_BLOCK: 21922368
     EXPLORER_URL: "https://hyperevmscan.io"
     RPC_NAME: "HYPEREVM_MAINNET_RPC_URL"
 
     # Deployed contract addresses
     contracts:
-      LIQUIDATOR_CONTRACT: "0x7D1c33cfD2637b3112893F058Ca2bEaDEad0a9F4"
-
-      GLUEX_ROUTER: "0xe95F6EAeaE1E4d650576Af600b33D9F7e5f9f7fd"
-
-      #EVK Addresses
       EVC: "0xceAA7cdCD7dDBee8601127a9Abb17A974d613db4"
-      SWAPPER: "0x7Ad9b79921D949C6dD6bA1384fE6884F9dFaFe09"
-      SWAP_VERIFIER: "0x7B3cBc937D5c84B5F863Ddb3a71c5a1740A8E9E1"
+      GLUEX_ROUTER: "0xe95F6EAeaE1E4d650576Af600b33D9F7e5f9f7fd"
+      SWAPPER: "0x482eE4522e9A0037bD78B2433e9a33aF90AD6D2c"
+      SWAP_VERIFIER: "0x56DceFB47a556999e7608deAbAeDa6eD1dFeA39B"
+      LIQUIDATOR_CONTRACT: "0x34C832C74cE8fbf0Ea612561bab21DF589f5bfb8"
       
       # Other relevant contracts & Units of Account
       WETH: "0xBe6727B535545C67d5cAa73dEa54865B92CF7907" # UETH
@@ -124,7 +121,7 @@ chains:
   1:
     # Config
     name: "Ethereum"
-    EVC_DEPLOYMENT_BLOCK: 20529207
+    EVC_START_BLOCK: 20529207
     EXPLORER_URL: "https://etherscan.io"
     RPC_NAME: "MAINNET_RPC_URL"
 
@@ -149,7 +146,7 @@ chains:
   8453:
     # Config
     name: "Base"
-    EVC_DEPLOYMENT_BLOCK: 22282342
+    EVC_START_BLOCK: 22282342
     EXPLORER_URL: "https://basescan.org"
     RPC_NAME: "BASE_RPC_URL"
 
@@ -174,7 +171,7 @@ chains:
   1923:
     # Config
     name: "Swell"
-    EVC_DEPLOYMENT_BLOCK: 485320
+    EVC_START_BLOCK: 485320
     EXPLORER_URL: "https://explorer.swellnetwork.io"
     RPC_NAME: "SWELL_RPC_URL"
 
@@ -199,7 +196,7 @@ chains:
   146:
     # Config
     name: "Sonic"
-    EVC_DEPLOYMENT_BLOCK: 5324624
+    EVC_START_BLOCK: 5324624
     EXPLORER_URL: "https://sonicscan.org"
     RPC_NAME: "SONIC_RPC_URL"
 
@@ -222,7 +219,7 @@ chains:
 
   60808:
     name: "BOB"
-    EVC_DEPLOYMENT_BLOCK: 11481883
+    EVC_START_BLOCK: 11481883
     EXPLORER_URL: "https://explorer.gobob.xyz/"
     RPC_NAME: "BOB_RPC_URL"
 
@@ -245,7 +242,7 @@ chains:
   
   80094:
     name: "Berachain"
-    EVC_DEPLOYMENT_BLOCK: 786266
+    EVC_START_BLOCK: 786266
     EXPLORER_URL: "https://berascan.com/"
     RPC_NAME: "BERA_RPC_URL"
     

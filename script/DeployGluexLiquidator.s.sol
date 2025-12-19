@@ -23,11 +23,14 @@ contract DeployGluexLiquidator is Script {
         GluexGsmSwapper gluexGsmSwapper = new GluexGsmSwapper(EVC, deployer, GSM);
 
         GluexGsmLiquidator gluexGsmLiquidator = new GluexGsmLiquidator(deployer, address(gluexGsmSwapper), address(swapVerifier), EVC, PYTH);
+
+        gluexGsmSwapper.transferOwnership(address(gluexGsmLiquidator));
         
         vm.stopBroadcast();
 
         console2.log("SwapVerifier: ", address(swapVerifier));
         console2.log("GluexGsmSwapper: ", address(gluexGsmSwapper));
         console2.log("GluexGsmLiquidator: ", address(gluexGsmLiquidator));
+        console2.log("GluexGsmSwapper owner: ", gluexGsmSwapper.owner());
     }
 }

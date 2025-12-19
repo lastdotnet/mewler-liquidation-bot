@@ -100,7 +100,7 @@ The `app/config.yaml` file should already have chain configurations. Make sure:
   - `WETH`, `PYTH`: Other relevant contract addresses
 - ABI paths point to the correct compiled contract files
 - Chain-specific settings match your deployment
-- `EVC_DEPLOYMENT_BLOCK`: The block number when EVC was deployed (used for initial event scanning)
+- `EVC_START_BLOCK`: The block number when EVC was deployed (used for initial event scanning)
 
 ### 4. Update Chain IDs in `app/__init__.py`
 
@@ -196,7 +196,7 @@ pylint app/liquidation/liquidation_bot.py
 
 ### Bot Not Finding Accounts
 
-- Check that `EVC_DEPLOYMENT_BLOCK` in `config.yaml` is correct
+- Check that `EVC_START_BLOCK` in `config.yaml` is correct
 - Verify the EVC contract address is correct
 - Ensure your RPC URL is working and can query the chain
 
