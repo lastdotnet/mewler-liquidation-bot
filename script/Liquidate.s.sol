@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {GluexGsmLiquidator} from "contracts/GluexGsmLiquidator.sol";
 import {Liquidator} from "contracts/Liquidator.sol";
 import {Script} from "forge-std/Script.sol";
-import {Ownable} from "lib/evk-periphery/lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+import {Ownable} from "openzeppelin-contracts/access/Ownable.sol";
 import {console} from "forge-std/console.sol";
 import {GluexGsmSwapper} from "contracts/evk-periphery/Swaps/GluexGsmSwapper.sol";
 import {SwapVerifier} from "contracts/SwapVerifier.sol";

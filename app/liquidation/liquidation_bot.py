@@ -912,12 +912,15 @@ class EVCListener:
         """
         for attempt in range(max_retries):
             try:
-                # logger.info("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
-                #             start_block, end_block)
+                logger.debug("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
+                            start_block, end_block)
 
                 logs = self.evc_instance.events.AccountStatusCheck().get_logs(
                     fromBlock=start_block,
                     toBlock=end_block)
+
+                logger.debug("EVCListener: Found %s AccountStatusCheck events in blocks %s to %s",
+                            len(logs), start_block, end_block)
 
                 for log in logs:
                     vault_address = log["args"]["controller"]
@@ -974,12 +977,22 @@ class EVCListener:
         Goes in reverse order to build smallest queue possible with most up to date info
         """
         try:
+            # Verify RPC connection
+            try:
+                current_block = self.w3.eth.block_number
+                logger.info("EVCListener: RPC connection verified. Current block: %s", current_block)
+            except Exception as ex:
+                logger.error("EVCListener: Failed to connect to RPC: %s", ex, exc_info=True)
+                raise
+
             # If the account monitor has a saved state,
             # assume it has been loaded from that and start from the last saved block
             start_block = max(int(self.config.EVC_START_BLOCK),
                               self.account_monitor.last_saved_block)
-
-            current_block = self.w3.eth.block_number
+            
+            logger.info("EVCListener: EVC contract address: %s", self.config.EVC)
+            logger.info("EVCListener: Starting from block %s (EVC_START_BLOCK: %s, last_saved_block: %s)",
+                       start_block, self.config.EVC_START_BLOCK, self.account_monitor.last_saved_block)
 
             batch_block_size = self.config.BATCH_SIZE
 
@@ -989,8 +1002,12 @@ class EVCListener:
 
             seen_accounts = set()
 
+            initial_start_block = start_block
             while start_block < current_block:
                 end_block = min(start_block + batch_block_size, current_block)
+
+                logger.info("EVCListener: Scanning batch from block %s to %s (batch size: %s)",
+                           start_block, end_block, end_block - start_block + 1)
 
                 self.scan_block_range_for_account_status_check(start_block, end_block,
                                                                seen_accounts=seen_accounts)
@@ -1001,8 +1018,9 @@ class EVCListener:
                 time.sleep(self.config.BATCH_INTERVAL) # Sleep in between batches to avoid rate limiting
 
             logger.info("EVCListener: "
-                        "Finished batch scan of AccountStatusCheck events from block %s to %s.",
-                        start_block, current_block)
+                        "Finished batch scan of AccountStatusCheck events from block %s to %s. "
+                        "Total accounts found: %s",
+                        initial_start_block, current_block, len(seen_accounts))
 
         except Exception as ex: # pylint: disable=broad-except
             logger.error("EVCListener: "
