@@ -1,0 +1,20 @@
+{
+    "accounts": {
+        "0xeD5050E6a5007e5697Be06543857389B44975Ab0": {
+            "address": "0xeD5050E6a5007e5697Be06543857389B44975Ab0",
+            "controller_address": "0x09a6ad87Eff280755BdF3E2C863358D27d81262D",
+            "time_of_next_update": 1766154370.6031585,
+            "current_health_score": 0.9305006426522425
+        }
+    },
+    "vaults": {
+        "0x09a6ad87Eff280755BdF3E2C863358D27d81262D": "0x09a6ad87Eff280755BdF3E2C863358D27d81262D"
+    },
+    "queue": [
+        [
+            1766154370.6031585,
+            "0xeD5050E6a5007e5697Be06543857389B44975Ab0"
+        ]
+    ],
+    "last_saved_block": 22182225
+}
