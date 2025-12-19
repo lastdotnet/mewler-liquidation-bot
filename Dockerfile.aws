@@ -20,8 +20,7 @@ RUN /root/.foundry/bin/forge build
 
 FROM --platform=${PLATFORM} debian:trixie-slim AS runtime
 
-RUN apt-get update && apt-get install -y gnupg adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
-RUN curl -Ls https://cli.doppler.com/install.sh | sh
+RUN apt-get update && apt-get install -y adduser python3-full virtualenv && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app /app
 
@@ -61,4 +60,4 @@ EXPOSE 8080
 
 # CMD ["python", "python/liquidation_bot.py"]
 # Run the application
-CMD ["doppler", "run", "--", ".venv/bin/gunicorn", "--bind", "0.0.0.0:8080", "application:application"]
+CMD [".venv/bin/gunicorn", "--bind", "0.0.0.0:8080", "application:application"]

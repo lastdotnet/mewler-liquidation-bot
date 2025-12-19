@@ -1,5 +1,5 @@
-name: Cdk synth
-description: Synthesizes the CDK stacks defined in `cdk/app.py` using Python CDK
+name: Deploy CDK Stack
+description: Deploys individual CDK Stacks defined in `cdk/app.py` using Python CDK
 
 inputs:
   account:
