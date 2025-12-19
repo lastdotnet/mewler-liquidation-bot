@@ -103,8 +103,15 @@ class MewlerLiquidationBotStack(Stack):
             "LIQUIDATOR_EOA",
             "LIQUIDATOR_PRIVATE_KEY",
         ]
+        optional_secret_keys = [
+            "SLACK_WEBHOOK_URL",
+        ]
 
         for key in required_secret_keys:
+            secrets[key] = ecs.Secret.from_secrets_manager(secret, key)
+        
+        # Add optional secrets from Secrets Manager
+        for key in optional_secret_keys:
             secrets[key] = ecs.Secret.from_secrets_manager(secret, key)
 
         container = task_definition.add_container(

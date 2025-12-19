@@ -37,8 +37,7 @@ MewlerLiquidationBotStack(
         "GLUEX_UNIQUE_PID": "657a8d5a95d73a70a4b49319544a42ad61d689c83679fcfe6b80e8e9b51cfe2c",
         "GLUEX_API_KEY": "SVQkMIOLo9O2NpA0xI0pQGPV1FYIYXmk",
         ### OPTIONAL ###
-        # Slack webhook URL for sending notifications
-        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/SLACK_KEY",
+        # Note: SLACK_WEBHOOK_URL should be in Secrets Manager, not here
         # URL for the liquidation UI, if including in the slack notification
         "RISK_DASHBOARD_URL": "http://127.0.0.1:8080",
         # Note: LIQUIDATOR_EOA and LIQUIDATOR_PRIVATE_KEY must be in Secrets Manager
