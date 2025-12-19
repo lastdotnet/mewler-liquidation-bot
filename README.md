@@ -131,7 +131,7 @@ Configuration in `config.yaml` file:
 
 - `SWAP_DELTA, MAX_SEARCH_ITERATIONS` - Used to define how much overswapping is accetable when searching 1Inch swaps
 
-- `EVC_DEPLOYMENT_BLOCK` - Block that the contracs were deployed
+- `EVC_START_BLOCK` - Block that the contracs were deployed
 
 - `WETH, EVC, SWAPPER, SWAP_VERIFIER, LIQUIDATOR_CONTRACT, ORACLE_LENS` - Relevant deployed contract addresses. The liquidator contract has been deployed on Mainnet, but feel free to redeploy.
 

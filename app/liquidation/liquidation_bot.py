@@ -430,6 +430,98 @@ class AccountMonitor:
 
         self.update_account_liquidity(address)
 
+    def check_and_execute_liquidation(self, address: str, health_score: float) -> None:
+        """
+        Check if an account is unhealthy and attempt liquidation if profitable.
+        This is the core liquidation flow logic that can be called from multiple places.
+        
+        Args:
+            address: The account address to check
+            health_score: The current health score of the account
+        """
+        account = self.accounts.get(address)
+        if not account:
+            logger.error("AccountMonitor: %s not found in account list.", address, exc_info=True)
+            return
+            
+        try:
+            if self.notify:
+                if account.address in self.recently_posted_low_value:
+                    if (time.time() - self.recently_posted_low_value[account.address]
+                        < self.config.LOW_HEALTH_REPORT_INTERVAL
+                        and account.value_borrowed < self.config.SMALL_POSITION_THRESHOLD):
+                        logger.info("Skipping posting notification "
+                                    "for account %s, recently posted", address)
+                else:
+                    try:
+                        post_unhealthy_account_on_slack(address, account.controller.address,
+                                                        health_score,
+                                                        account.value_borrowed, self.config)
+                        logger.info("Valut borrowed: %s", account.value_borrowed)
+                        if account.value_borrowed < self.config.SMALL_POSITION_THRESHOLD:
+                            self.recently_posted_low_value[account.address] = time.time()
+                    except Exception as ex: # pylint: disable=broad-except
+                        logger.error("AccountMonitor: "
+                                     "Failed to post low health notification "
+                                     "for account %s to slack: %s",
+                                     address, ex, exc_info=True)
+
+            logger.info("AccountMonitor: %s is unhealthy, "
+                        "checking liquidation profitability.",
+                        address)
+            (result, liquidation_data, params) = account.simulate_liquidation()
+
+            if result:
+                if self.notify:
+                    try:
+                        logger.info("AccountMonitor: Posting liquidation notification "
+                                    "to slack for account %s.", address)
+                        post_liquidation_opportunity_on_slack(address,
+                                                              account.controller.address,
+                                                              liquidation_data, params, self.config)
+                    except Exception as ex: # pylint: disable=broad-except
+                        logger.error("AccountMonitor: "
+                                     "Failed to post liquidation notification "
+                                     " for account %s to slack: %s",
+                                     address, ex, exc_info=True)
+                if self.execute_liquidation:
+                    try:
+                        tx_hash, tx_receipt = Liquidator.execute_liquidation(
+                            liquidation_data["tx"], self.config)
+                        if tx_hash and tx_receipt:
+                            logger.info("AccountMonitor: %s liquidated "
+                                        "on collateral %s.",
+                                        address,
+                                        liquidation_data["collateral_address"])
+                            if self.notify:
+                                try:
+                                    logger.info("AccountMonitor: Posting liquidation result"
+                                                " to slack for account %s.", address)
+                                    post_liquidation_result_on_slack(address,
+                                                                    account.controller.address,
+                                                                    liquidation_data,
+                                                                    tx_hash, self.config)
+                                except Exception as ex: # pylint: disable=broad-except
+                                    logger.error("AccountMonitor: "
+                                        "Failed to post liquidation result "
+                                        " for account %s to slack: %s",
+                                        address, ex, exc_info=True)
+
+                        # Update account health score after liquidation
+                        account.update_liquidity()
+                    except Exception as ex: # pylint: disable=broad-except
+                        logger.error("AccountMonitor: "
+                                     "Failed to execute liquidation for account %s: %s",
+                                     address, ex, exc_info=True)
+            else:
+                logger.info("AccountMonitor: "
+                            "Account %s is unhealthy but not profitable to liquidate.",
+                            address)
+        except Exception as ex: # pylint: disable=broad-except
+            logger.error("AccountMonitor: "
+                         "Exception simulating liquidation for account %s: %s",
+                         address, ex, exc_info=True)
+
     def update_account_liquidity(self, address: str) -> None:
         """
         Update the liquidity of a specific account.
@@ -451,85 +543,7 @@ class AccountMonitor:
             health_score = account.update_liquidity()
 
             if health_score < 1:
-                try:
-                    if self.notify:
-                        if account.address in self.recently_posted_low_value:
-                            if (time.time() - self.recently_posted_low_value[account.address]
-                                < self.config.LOW_HEALTH_REPORT_INTERVAL
-                                and account.value_borrowed < self.config.SMALL_POSITION_THRESHOLD):
-                                logger.info("Skipping posting notification "
-                                            "for account %s, recently posted", address)
-                        else:
-                            try:
-                                post_unhealthy_account_on_slack(address, account.controller.address,
-                                                                health_score,
-                                                                account.value_borrowed, self.config)
-                                logger.info("Valut borrowed: %s", account.value_borrowed)
-                                if account.value_borrowed < self.config.SMALL_POSITION_THRESHOLD:
-                                    self.recently_posted_low_value[account.address] = time.time()
-                            except Exception as ex: # pylint: disable=broad-except
-                                logger.error("AccountMonitor: "
-                                             "Failed to post low health notification "
-                                             "for account %s to slack: %s",
-                                             address, ex, exc_info=True)
-
-                    logger.info("AccountMonitor: %s is unhealthy, "
-                                "checking liquidation profitability.",
-                                address)
-                    (result, liquidation_data, params) = account.simulate_liquidation()
-
-                    if result:
-                        if self.notify:
-                            try:
-                                logger.info("AccountMonitor: Posting liquidation notification "
-                                            "to slack for account %s.", address)
-                                post_liquidation_opportunity_on_slack(address,
-                                                                      account.controller.address,
-                                                                      liquidation_data, params, self.config)
-                            except Exception as ex: # pylint: disable=broad-except
-                                logger.error("AccountMonitor: "
-                                             "Failed to post liquidation notification "
-                                             " for account %s to slack: %s",
-                                             address, ex, exc_info=True)
-                        if self.execute_liquidation:
-                            try:
-                                tx_hash, tx_receipt = Liquidator.execute_liquidation(
-                                    liquidation_data["tx"], self.config)
-                                if tx_hash and tx_receipt:
-                                    logger.info("AccountMonitor: %s liquidated "
-                                                "on collateral %s.",
-                                                address,
-                                                liquidation_data["collateral_address"])
-                                    if self.notify:
-                                        try:
-                                            logger.info("AccountMonitor: Posting liquidation result"
-                                                        " to slack for account %s.", address)
-                                            post_liquidation_result_on_slack(address,
-                                                                            account.controller.address,
-                                                                            liquidation_data,
-                                                                            tx_hash, self.config)
-                                        except Exception as ex: # pylint: disable=broad-except
-                                            logger.error("AccountMonitor: "
-                                                "Failed to post liquidation result "
-                                                " for account %s to slack: %s",
-                                                address, ex, exc_info=True)
-
-                                # Update account health score after liquidation
-                                # Need to know how healthy the account is after liquidation
-                                # and if we need to liquidate again
-                                account.update_liquidity()
-                            except Exception as ex: # pylint: disable=broad-except
-                                logger.error("AccountMonitor: "
-                                             "Failed to execute liquidation for account %s: %s",
-                                             address, ex, exc_info=True)
-                    else:
-                        logger.info("AccountMonitor: "
-                                    "Account %s is unhealthy but not profitable to liquidate.",
-                                    address)
-                except Exception as ex: # pylint: disable=broad-except
-                    logger.error("AccountMonitor: "
-                                 "Exception simulating liquidation for account %s: %s",
-                                 address, ex, exc_info=True)
+                self.check_and_execute_liquidation(address, health_score)
 
             next_update_time = account.time_of_next_update
 
@@ -573,9 +587,9 @@ class AccountMonitor:
 
             self.last_saved_block = self.latest_block
 
-            logger.info("AccountMonitor: State saved at time %s up to block %s",
-                        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-                        self.latest_block)
+            # logger.info("AccountMonitor: State saved at time %s up to block %s",
+            #             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            #             self.latest_block)
         except Exception as ex: # pylint: disable=broad-except
             logger.error("AccountMonitor: Failed to save state: %s", ex, exc_info=True)
 
@@ -616,7 +630,7 @@ class AccountMonitor:
                 logger.info("AccountMonitor: State loaded from save"
                             " file %s from block %s to block %s",
                             save_path,
-                            self.config.EVC_DEPLOYMENT_BLOCK,
+                            self.config.EVC_START_BLOCK,
                             self.latest_block)
             elif not local_save:
                 # Load from remote location
@@ -640,6 +654,12 @@ class AccountMonitor:
                 if account.current_health_score == math.inf:
                     logger.info("AccountMonitor: %s has no borrow, skipping", address)
                     continue
+
+                # If account is unhealthy, check for liquidation immediately
+                if health_score < 1:
+                    logger.info("AccountMonitor: %s is unhealthy (health_score: %s) during queue rebuild, "
+                                "checking liquidation immediately", address, health_score)
+                    self.check_and_execute_liquidation(address, health_score)
 
                 next_update_time = account.time_of_next_update
                 self.update_queue.put((next_update_time, address))
@@ -892,12 +912,15 @@ class EVCListener:
         """
         for attempt in range(max_retries):
             try:
-                logger.info("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
+                logger.debug("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
                             start_block, end_block)
 
                 logs = self.evc_instance.events.AccountStatusCheck().get_logs(
                     fromBlock=start_block,
                     toBlock=end_block)
+
+                logger.debug("EVCListener: Found %s AccountStatusCheck events in blocks %s to %s",
+                            len(logs), start_block, end_block)
 
                 for log in logs:
                     vault_address = log["args"]["controller"]
@@ -917,9 +940,10 @@ class EVCListener:
                     else:
                         seen_accounts.add(account_address)
 
+                    block_number = log["blockNumber"]
                     logger.info("EVCListener: AccountStatusCheck event found for account %s "
-                                "with controller %s, triggering monitor update.",
-                                account_address, vault_address)
+                                "with controller %s at block %s, triggering monitor update.",
+                                account_address, vault_address, block_number)
 
                     try:
                         self.account_monitor.update_account_on_status_check_event(
@@ -930,8 +954,8 @@ class EVCListener:
                                      "on AccountStatusCheck event: %s",
                                      account_address, ex, exc_info=True)
 
-                logger.info("EVCListener: Finished scanning blocks %s to %s "
-                            "for AccountStatusCheck events.", start_block, end_block)
+                # logger.info("EVCListener: Finished scanning blocks %s to %s "
+                #             "for AccountStatusCheck events.", start_block, end_block)
 
                 self.account_monitor.latest_block = end_block
                 return
@@ -953,12 +977,22 @@ class EVCListener:
         Goes in reverse order to build smallest queue possible with most up to date info
         """
         try:
+            # Verify RPC connection
+            try:
+                current_block = self.w3.eth.block_number
+                logger.info("EVCListener: RPC connection verified. Current block: %s", current_block)
+            except Exception as ex:
+                logger.error("EVCListener: Failed to connect to RPC: %s", ex, exc_info=True)
+                raise
+
             # If the account monitor has a saved state,
             # assume it has been loaded from that and start from the last saved block
-            start_block = max(int(self.config.EVC_DEPLOYMENT_BLOCK),
+            start_block = max(int(self.config.EVC_START_BLOCK),
                               self.account_monitor.last_saved_block)
-
-            current_block = self.w3.eth.block_number
+            
+            logger.info("EVCListener: EVC contract address: %s", self.config.EVC)
+            logger.info("EVCListener: Starting from block %s (EVC_START_BLOCK: %s, last_saved_block: %s)",
+                       start_block, self.config.EVC_START_BLOCK, self.account_monitor.last_saved_block)
 
             batch_block_size = self.config.BATCH_SIZE
 
@@ -968,8 +1002,12 @@ class EVCListener:
 
             seen_accounts = set()
 
+            initial_start_block = start_block
             while start_block < current_block:
                 end_block = min(start_block + batch_block_size, current_block)
+
+                logger.info("EVCListener: Scanning batch from block %s to %s (batch size: %s)",
+                           start_block, end_block, end_block - start_block + 1)
 
                 self.scan_block_range_for_account_status_check(start_block, end_block,
                                                                seen_accounts=seen_accounts)
@@ -980,8 +1018,9 @@ class EVCListener:
                 time.sleep(self.config.BATCH_INTERVAL) # Sleep in between batches to avoid rate limiting
 
             logger.info("EVCListener: "
-                        "Finished batch scan of AccountStatusCheck events from block %s to %s.",
-                        start_block, current_block)
+                        "Finished batch scan of AccountStatusCheck events from block %s to %s. "
+                        "Total accounts found: %s",
+                        initial_start_block, current_block, len(seen_accounts))
 
         except Exception as ex: # pylint: disable=broad-except
             logger.error("EVCListener: "
@@ -1053,7 +1092,7 @@ class Liquidator:
 
         max_profit_data = {
             "tx": None, 
-            "profit": 0,
+            "profit": -math.inf,
             "collateral_address": None,
             "collateral_asset": None,
             "leftover_borrow": 0, 
@@ -1135,9 +1174,21 @@ class Liquidator:
         collateral_vault_address = collateral_vault.address
         collateral_asset = collateral_vault.underlying_asset_address
 
-        (max_repay, seized_collateral_shares) = vault.check_liquidation(violator_address,
-                                                                 collateral_vault_address,
-                                                                 config.LIQUIDATOR_EOA)
+        try:
+            logger.info("Liquidator: Calling check_liquidation for account %s, collateral %s",
+                       violator_address, collateral_vault_address)
+            (max_repay, seized_collateral_shares) = vault.check_liquidation(violator_address,
+                                                                     collateral_vault_address,
+                                                                     config.LIQUIDATOR_EOA)
+            logger.info("Liquidator: check_liquidation returned max_repay=%s, seized_collateral_shares=%s",
+                       max_repay, seized_collateral_shares)
+        except Exception as ex:
+            error_code = None
+            if hasattr(ex, 'args') and len(ex.args) > 0:
+                error_code = ex.args[0]
+            logger.error("Liquidator: Error calling check_liquidation: %s, error_code: %s", 
+                        ex, error_code, exc_info=True)
+            raise
 
         seized_collateral_assets = collateral_vault.convert_to_assets(seized_collateral_shares)
 
@@ -1198,9 +1249,72 @@ class Liquidator:
 
         time.sleep(config.API_REQUEST_DELAY)
 
+        # Get GlueX router address from config
+        gluex_router = config.GLUEX_ROUTER
+        if not gluex_router:
+            logger.error("Liquidator: GLUEX_ROUTER not found in config")
+            return ({"profit": 0}, None)
+
+        # Wrap GlueX router calldata in ISwapper.swap(SwapParams) call
         swap_data = []
         for _, item in enumerate(swap_api_response["swap"]["multicallItems"]):
-            swap_data.append(item["data"])
+            gluex_calldata = item["data"]
+            
+            # Encode the GlueX router address + calldata in the data field
+            # Format: abi.encode(router_address, calldata_bytes)
+            gluex_calldata_bytes = bytes.fromhex(gluex_calldata[2:]) if gluex_calldata.startswith("0x") else bytes.fromhex(gluex_calldata)
+            
+            # ABI encode: (address, bytes)
+            encoded_data = config.w3.codec.encode(
+                ["address", "bytes"],
+                [gluex_router, gluex_calldata_bytes]
+            )
+            
+            # Create SwapParams struct
+            # handler: bytes32("Generic"), mode: 0 (exact input), account: swapper, 
+            # tokenIn: collateral_asset, tokenOut: borrowed_asset,
+            # vaultIn: collateral_vault, accountIn: swapper,
+            # receiver: swapper, amountOut: 0 (ignored for exact input), data: encoded_data
+            # In Solidity, bytes32("Generic") pads the string to 32 bytes (not a hash)
+            handler_generic = ("Generic".encode('utf-8') + b'\x00' * (32 - len("Generic")))[:32]
+            
+            swap_params = (
+                handler_generic,  # bytes32 handler
+                0,  # uint256 mode (0 = exact input)
+                config.SWAPPER,  # address account
+                collateral_asset,  # address tokenIn
+                borrowed_asset,  # address tokenOut
+                collateral_vault_address,  # address vaultIn
+                config.SWAPPER,  # address accountIn
+                config.SWAPPER,  # address receiver
+                0,  # uint256 amountOut (ignored for exact input mode)
+                encoded_data  # bytes data
+            )
+            
+            # Encode swap(SwapParams) function call
+            # Function signature: swap((bytes32,uint256,address,address,address,address,address,address,uint256,bytes))
+            swap_call_data = config.w3.eth.contract(abi=[{
+                "name": "swap",
+                "type": "function",
+                "inputs": [{
+                    "name": "params",
+                    "type": "tuple",
+                    "components": [
+                        {"name": "handler", "type": "bytes32"},
+                        {"name": "mode", "type": "uint256"},
+                        {"name": "account", "type": "address"},
+                        {"name": "tokenIn", "type": "address"},
+                        {"name": "tokenOut", "type": "address"},
+                        {"name": "vaultIn", "type": "address"},
+                        {"name": "accountIn", "type": "address"},
+                        {"name": "receiver", "type": "address"},
+                        {"name": "amountOut", "type": "uint256"},
+                        {"name": "data", "type": "bytes"}
+                    ]
+                }]
+            }]).encodeABI("swap", [swap_params])
+            
+            swap_data.append(swap_call_data)
 
         logger.info("Liquidator: Seized collateral assets: %s, output amount: %s, "
                     "leftover_borrow: %s", seized_collateral_assets, amount_out,
@@ -1226,42 +1340,112 @@ class Liquidator:
         )
 
         logger.info("Liquidator: Liquidation params for account %s: %s", violator_address, params)
-        logger.info("Liquidator: Liquidation swap_data for account %s: %s", violator_address, swap_data)
 
         pyth_feed_ids = vault.pyth_feed_ids
 
         suggested_gas_price = int(config.w3.eth.gas_price * 1.2)
+        nonce = config.w3.eth.get_transaction_count(config.LIQUIDATOR_EOA)
 
-        if len(pyth_feed_ids)> 0:
-            logger.info("Liquidator: executing with pyth")
-            update_data = PullOracleHandler.get_pyth_update_data(pyth_feed_ids)
-            update_fee = PullOracleHandler.get_pyth_update_fee(update_data, config)
-            liquidation_tx = liquidator_contract.functions.liquidateSingleCollateralWithPythOracle(
-                params, swap_data, [update_data]
-                ).build_transaction({
+        # Build transaction first to estimate gas
+        MAX_GAS_LIMIT = 2000000  # 2M gas limit for small blocks
+        try:
+            if len(pyth_feed_ids)> 0:
+                current_block = config.w3.eth.block_number
+                logger.info("Liquidator: executing liquidateSingleCollateralWithPythOracle at block %s", current_block)
+                update_data = PullOracleHandler.get_pyth_update_data(pyth_feed_ids)
+                update_fee = PullOracleHandler.get_pyth_update_fee(update_data, config)
+                tx_params = {
                     "chainId": config.CHAIN_ID,
                     "from": config.LIQUIDATOR_EOA,
-                    "nonce": config.w3.eth.get_transaction_count(config.LIQUIDATOR_EOA),
+                    "nonce": nonce,
                     "value": update_fee,
-                    "gasPrice": suggested_gas_price
-                })
-        else:
-            logger.info("Liquidator: executing normally")
-
-            liquidation_tx = liquidator_contract.functions.liquidateSingleCollateral(
-                params, swap_data
-                ).build_transaction({
+                    # "gasPrice": suggested_gas_price
+                }
+                # Build transaction without gas first to estimate
+                liquidation_tx_temp = liquidator_contract.functions.liquidateSingleCollateralWithPythOracle(
+                    params, swap_data, [update_data]
+                    ).build_transaction(tx_params)
+            else:
+                current_block = config.w3.eth.block_number
+                logger.info("Liquidator: executing liquidateSingleCollateral at block %s", current_block)
+                tx_params = {
                     "chainId": config.CHAIN_ID,
-                    "gasPrice": suggested_gas_price,
                     "from": config.LIQUIDATOR_EOA,
-                    "nonce": config.w3.eth.get_transaction_count(config.LIQUIDATOR_EOA)
-                })
+                    "nonce": nonce,
+                    # "gasPrice": suggested_gas_price
+                }
+                # Build transaction without gas first to estimate
+                liquidation_tx_temp = liquidator_contract.functions.liquidateSingleCollateral(
+                    params, swap_data
+                    ).build_transaction(tx_params)
+            
+            # Estimate gas and add 20% buffer, but cap at 2M (block gas limit for small blocks)
+            try:
+                estimated_gas = config.w3.eth.estimate_gas(liquidation_tx_temp)
+                gas_with_buffer = int(estimated_gas * 1.2)
+                # Cap at block gas limit
+                gas_with_buffer = min(gas_with_buffer, MAX_GAS_LIMIT)
+                logger.info("Estimated gas: %s, gas with buffer (capped at %s): %s", 
+                           estimated_gas, MAX_GAS_LIMIT, gas_with_buffer)
+                
+                if gas_with_buffer >= MAX_GAS_LIMIT:
+                    logger.warning("Gas limit capped at %s (block limit). Estimated gas was %s", 
+                                 MAX_GAS_LIMIT, estimated_gas)
+            except Exception as ex:
+                logger.error("Failed to estimate gas: %s", ex, exc_info=True)
+                # Use block gas limit as fallback
+                gas_with_buffer = MAX_GAS_LIMIT
+                logger.warning("Using fallback gas limit: %s (block limit)", gas_with_buffer)
+            
+            # Rebuild transaction with gas field
+            tx_params["gas"] = gas_with_buffer
+            if len(pyth_feed_ids)> 0:
+                liquidation_tx = liquidator_contract.functions.liquidateSingleCollateralWithPythOracle(
+                    params, swap_data, [update_data]
+                    ).build_transaction(tx_params)
+            else:
+                liquidation_tx = liquidator_contract.functions.liquidateSingleCollateral(
+                    params, swap_data
+                    ).build_transaction(tx_params)
+        except Exception as ex:
+            error_code = None
+            if hasattr(ex, 'args') and len(ex.args) > 0:
+                error_code = ex.args[0]
+            
+            # Print only contract call arguments needed for Forge script
+            # Format SWAP_DATA as comma-separated hex strings for Forge (bytes[] format)
+            swap_data_formatted = ",".join(swap_data) if swap_data else ""
+            current_block = config.w3.eth.block_number
+            
+            # Format PARAMS as individual variables for easy copy-paste into Forge
+            # params tuple: (violator_address, vault_address, borrowed_asset, collateral_vault_address, 
+            #                collateral_asset, max_repay, seized_collateral_shares, profit_receiver)
+            args_log = (
+                f"PARAMS_VIOLATOR_ADDRESS={params[0]}\n"
+                f"PARAMS_VAULT_ADDRESS={params[1]}\n"
+                f"PARAMS_BORROWED_ASSET={params[2]}\n"
+                f"PARAMS_COLLATERAL_VAULT_ADDRESS={params[3]}\n"
+                f"PARAMS_COLLATERAL_ASSET={params[4]}\n"
+                f"PARAMS_MAX_REPAY={params[5]}\n"
+                f"PARAMS_SEIZED_COLLATERAL_SHARES={params[6]}\n"
+                f"PARAMS_PROFIT_RECEIVER={params[7]}\n"
+                f"SWAP_DATA={swap_data_formatted}\n"
+                f"SWAP_DATA_BLOCK_NUMBER={current_block}\n"
+            )
+            
+            # Add UPDATE_FEE only if using Pyth
+            if len(pyth_feed_ids) > 0 and 'update_fee' in locals():
+                args_log += f"UPDATE_FEE={update_fee}\n"
+            
+            logger.error("Liquidator: Error building liquidation transaction:\n%s\nError: %s (code: %s)", 
+                        args_log, ex, error_code, exc_info=True)
+            raise
+        
         logger.info("Leftover borrow in eth: %s", leftover_borrow_in_eth)
-        logger.info("Estimated gas: %s", config.w3.eth.estimate_gas(liquidation_tx))
+        logger.info("Gas limit: %s", gas_with_buffer)
         logger.info("Suggested gas price: %s", suggested_gas_price)
 
-        net_profit = leftover_borrow_in_eth - (
-            config.w3.eth.estimate_gas(liquidation_tx) * suggested_gas_price)
+        net_profit = leftover_borrow_in_eth - (gas_with_buffer * suggested_gas_price)
 
         logger.info("Net profit: %s", net_profit)
 
@@ -1285,6 +1469,23 @@ class Liquidator:
         try:
             logger.info("Liquidator: Executing liquidation transaction %s...",
                         liquidation_transaction)
+
+            # Check if liquidator account has enough balance for gas
+            gas_limit = liquidation_transaction.get("gas", 0)
+            gas_price = liquidation_transaction.get("gasPrice", 0)
+            value = liquidation_transaction.get("value", 0)
+            total_cost = (gas_limit * gas_price) + value
+            
+            account_balance = config.w3.eth.get_balance(config.LIQUIDATOR_EOA)
+            logger.info("Liquidator: Account balance: %s, Transaction cost: %s (gas: %s * %s + value: %s)",
+                       account_balance, total_cost, gas_limit, gas_price, value)
+            
+            if account_balance < total_cost:
+                error_msg = (f"Insufficient balance: account has {account_balance} wei, "
+                           f"but transaction requires {total_cost} wei "
+                           f"(gas: {gas_limit} * {gas_price} + value: {value})")
+                logger.error("Liquidator: %s", error_msg)
+                raise ValueError(error_msg)
 
             signed_tx = config.w3.eth.account.sign_transaction(liquidation_transaction,
                                                         config.LIQUIDATOR_PRIVATE_KEY)
@@ -1355,7 +1556,7 @@ class Quoter:
             "skipSweepDepositOut": str(skip_sweep_deposit_out),
         }
 
-        response = make_gluex_api_request(config.GLUEX_API_URL, params)
+        response = make_gluex_api_request(params, config)
 
         if not response or not response["success"]:
             logger.error("Unable to get quote from swap api")
@@ -1422,10 +1623,10 @@ class GluexQuoter:
         # Convert slippage from percentage to basis points (1% = 100 basis points)
         slippage_bps = int(slippage * 100)
         
-        # Get unique PID from environment variable
-        unique_pid = os.getenv("GLUEX_UNIQUE_PID")
+        # Get unique PID from config
+        unique_pid = config.GLUEX_UNIQUE_PID
         if not unique_pid:
-            logger.error("GlueX: GLUEX_UNIQUE_PID environment variable not set")
+            logger.error("GlueX: GLUEX_UNIQUE_PID not set in config")
             return None
         
         # Build GlueX request body
@@ -1449,13 +1650,7 @@ class GluexQuoter:
         logger.info("GlueX: Requesting quote for %s -> %s, amount: %s, chain: %s",
                    token_in, token_out, amount, gluex_chain_id)
         
-        # Get GlueX API URL from config
-        gluex_api_url = os.getenv("GLUEX_API_URL")
-        if not gluex_api_url:
-            logger.error("GlueX: GLUEX_API_URL environment variable not set")
-            return None
-        
-        response = make_gluex_api_request(gluex_api_url, request_body)
+        response = make_gluex_api_request(request_body, config)
         
         if not response:
             logger.error("GlueX: Unable to get quote from GlueX API")
@@ -1493,7 +1688,6 @@ class GluexQuoter:
                        "Router: %s, Estimated net surplus: %s, Block number: %s",
                        output_amount, min_output_amount, result.get("router"), 
                        result.get("estimatedNetSurplus"), block_number)
-            logger.info("GlueX: Calldata: %s", calldata)
             
             normalized_response = {
                 "amountOut": str(output_amount),
