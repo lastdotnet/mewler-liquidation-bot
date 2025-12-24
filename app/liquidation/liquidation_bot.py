@@ -912,15 +912,16 @@ class EVCListener:
         """
         for attempt in range(max_retries):
             try:
-                logger.debug("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
-                            start_block, end_block)
+                # logger.debug("EVCListener: Scanning blocks %s to %s for AccountStatusCheck events.",
+                #             start_block, end_block)
 
                 logs = self.evc_instance.events.AccountStatusCheck().get_logs(
                     fromBlock=start_block,
                     toBlock=end_block)
 
-                logger.debug("EVCListener: Found %s AccountStatusCheck events in blocks %s to %s",
-                            len(logs), start_block, end_block)
+                if len(logs) > 0:
+                    logger.debug("EVCListener: Found %s AccountStatusCheck events in blocks %s to %s",
+                                len(logs), start_block, end_block)
 
                 for log in logs:
                     vault_address = log["args"]["controller"]
@@ -1006,8 +1007,8 @@ class EVCListener:
             while start_block < current_block:
                 end_block = min(start_block + batch_block_size, current_block)
 
-                logger.info("EVCListener: Scanning batch from block %s to %s (batch size: %s)",
-                           start_block, end_block, end_block - start_block + 1)
+                # logger.debug("EVCListener: Scanning batch from block %s to %s (batch size: %s)",
+                #            start_block, end_block, end_block - start_block + 1)
 
                 self.scan_block_range_for_account_status_check(start_block, end_block,
                                                                seen_accounts=seen_accounts)

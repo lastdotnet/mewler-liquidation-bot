@@ -61,6 +61,7 @@ class ChainConfig:
         self.GLUEX_UNIQUE_PID = os.getenv("GLUEX_UNIQUE_PID")
         self.SLACK_URL = os.getenv("SLACK_WEBHOOK_URL")
         self.RISK_DASHBOARD_URL = os.getenv("RISK_DASHBOARD_URL")
+        self.ENV = os.getenv("ENV", "DEV")
 
         # Load chain-specific RPC from env using RPC_NAME from config
         self.RPC_URL = os.getenv(self._chain["RPC_NAME"])

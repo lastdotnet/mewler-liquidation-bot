@@ -204,6 +204,9 @@ def post_unhealthy_account_on_slack(account_address: str, vault_address: str,
     """
     Post a message on Slack about an unhealthy account.
     """
+    if config.ENV.lower() != "prod":
+        return
+    
     spy_link = get_spy_link(account_address, config)
 
     message = (
@@ -234,6 +237,9 @@ def post_liquidation_opportunity_on_slack(account_address: str, vault_address: s
         message (str): The main message to post.
         liquidation_data (Optional[Dict[str, Any]]): Additional liquidation data to format.
     """
+    if config.ENV.lower() != "prod":
+        return
+    
     RISK_DASHBOARD_URL = config.RISK_DASHBOARD_URL
 
     if liquidation_data and params:
@@ -299,7 +305,6 @@ def post_liquidation_result_on_slack(account_address: str, vault_address: str,
         message (str): The main message to post.
         liquidation_data (Optional[Dict[str, Any]]): Additional liquidation data to format.
     """
-    
     spy_link = get_spy_link(account_address, config)
 
     message = (
@@ -339,6 +344,9 @@ def post_low_health_account_report(sorted_accounts, config: ChainConfig) -> None
         containing account addresses and their health scores,
         sorted by health score in ascending order.
     """
+    if config.ENV.lower() != "prod":
+        return
+    
     # Filter accounts below the threshold
     low_health_accounts = [
         (address, owner, subaccount, score, value, _, _) for address, owner, subaccount, score, value, _, _ in sorted_accounts
@@ -395,6 +403,8 @@ def post_error_notification(message, config: ChainConfig = None) -> None:
     Args:
         message (str): The error message to be posted.
     """
+    if config.ENV.lower() != "prod":
+        return
 
     error_message = f":rotating_light: *Error Notification* :rotating_light:\n\n{message}\n\n"
     error_message += f"Time: {time.strftime("%Y-%m-%d %H:%M:%S")}\n"
