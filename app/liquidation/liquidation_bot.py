@@ -454,9 +454,10 @@ class AccountMonitor:
                                     "for account %s, recently posted", address)
                 else:
                     try:
-                        post_unhealthy_account_on_slack(address, account.controller.address,
-                                                        health_score,
-                                                        account.value_borrowed, self.config)
+                        if self.config.ENV.lower() == "prod":
+                            post_unhealthy_account_on_slack(address, account.controller.address,
+                                                            health_score,
+                                                            account.value_borrowed, self.config)
                         logger.info("Valut borrowed: %s", account.value_borrowed)
                         if account.value_borrowed < self.config.SMALL_POSITION_THRESHOLD:
                             self.recently_posted_low_value[account.address] = time.time()
@@ -476,9 +477,10 @@ class AccountMonitor:
                     try:
                         logger.info("AccountMonitor: Posting liquidation notification "
                                     "to slack for account %s.", address)
-                        post_liquidation_opportunity_on_slack(address,
-                                                              account.controller.address,
-                                                              liquidation_data, params, self.config)
+                        if self.config.ENV.lower() == "prod":
+                            post_liquidation_opportunity_on_slack(address,
+                                                                  account.controller.address,
+                                                                  liquidation_data, params, self.config)
                     except Exception as ex: # pylint: disable=broad-except
                         logger.error("AccountMonitor: "
                                      "Failed to post liquidation notification "
@@ -697,7 +699,8 @@ class AccountMonitor:
         while self.running:
             try:
                 sorted_accounts = self.get_accounts_by_health_score()
-                post_low_health_account_report(sorted_accounts, self.config)
+                if self.config.ENV.lower() == "prod":
+                    post_low_health_account_report(sorted_accounts, self.config)
                 time.sleep(self.config.LOW_HEALTH_REPORT_INTERVAL)
             except Exception as ex: # pylint: disable=broad-except
                 logger.error("AccountMonitor: Failed to post low health account report: %s", ex,
@@ -1129,7 +1132,8 @@ class Liquidator:
                      time_elapsed > config.ERROR_COOLDOWN)
                     or (value_borrowed <= config.SMALL_POSITION_THRESHOLD and
                         time_elapsed > config.SMALL_POSITION_REPORT_INTERVAL)):
-                    post_error_notification(message, config)
+                    if config.ENV.lower() == "prod":
+                        post_error_notification(message, config)
                     time_of_last_post = now
                     liquidation_error_slack_cooldown[violator_address] = time_of_last_post
                 continue
@@ -1501,7 +1505,8 @@ class Liquidator:
         except Exception as ex: # pylint: disable=broad-except
             message = f"Unexpected error in executing liquidation: {ex}"
             logger.error(message, exc_info=True)
-            post_error_notification(message, config)
+            if config.ENV.lower() == "prod":
+                post_error_notification(message, config)
             return None, None
 
 class Quoter:
@@ -1708,4 +1713,4 @@ if __name__ == "__main__":
     except Exception as e: # pylint: disable=broad-except
         logger.critical("Uncaught exception: %s", e, exc_info=True)
         error_message = f"Uncaught global exception: {e}"
-        post_error_notification(error_message)
+        # Note: post_error_notification requires config to check ENV, skipping in global handler
