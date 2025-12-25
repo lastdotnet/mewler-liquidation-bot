@@ -299,7 +299,6 @@ def post_liquidation_result_on_slack(account_address: str, vault_address: str,
         message (str): The main message to post.
         liquidation_data (Optional[Dict[str, Any]]): Additional liquidation data to format.
     """
-    
     spy_link = get_spy_link(account_address, config)
 
     message = (
@@ -395,7 +394,6 @@ def post_error_notification(message, config: ChainConfig = None) -> None:
     Args:
         message (str): The error message to be posted.
     """
-
     error_message = f":rotating_light: *Error Notification* :rotating_light:\n\n{message}\n\n"
     error_message += f"Time: {time.strftime("%Y-%m-%d %H:%M:%S")}\n"
     if config:
