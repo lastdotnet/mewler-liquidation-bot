@@ -338,6 +338,7 @@ def post_low_health_account_report(sorted_accounts, config: ChainConfig) -> None
         containing account addresses and their health scores,
         sorted by health score in ascending order.
     """
+    logger = logging.getLogger("liquidation_bot")
     # Filter accounts below the threshold
     low_health_accounts = [
         (address, owner, subaccount, score, value, _, _) for address, owner, subaccount, score, value, _, _ in sorted_accounts
@@ -383,9 +384,9 @@ def post_low_health_account_report(sorted_accounts, config: ChainConfig) -> None
     try:
         response = requests.post(config.SLACK_URL, json=slack_payload, timeout=10)
         response.raise_for_status()
-        print("Low health account report posted to Slack successfully.")
+        logger.info("Low health account report posted to Slack successfully.")
     except requests.RequestException as e:
-        print(f"Failed to post low health account report to Slack: {e}")
+        logger.error("Failed to post low health account report to Slack: %s", e, exc_info=True)
 
 def post_error_notification(message, config: ChainConfig = None) -> None:
     """
@@ -408,6 +409,6 @@ def post_error_notification(message, config: ChainConfig = None) -> None:
     try:
         response = requests.post(config.SLACK_URL, json=slack_payload, timeout=10)
         response.raise_for_status()
-        print("Error notification posted to Slack successfully.")
+        logger.info("Error notification posted to Slack successfully.")
     except requests.RequestException as e:
-        print("Failed to post error notification to Slack: %s", e)
+        logger.error("Failed to post error notification to Slack: %s", e, exc_info=True)
