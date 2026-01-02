@@ -699,8 +699,14 @@ class AccountMonitor:
         while self.running:
             try:
                 sorted_accounts = self.get_accounts_by_health_score()
+                logger.debug("AccountMonitor: ENV value: %s (lowercase: %s)", 
+                            self.config.ENV, self.config.ENV.lower())
                 if self.config.ENV.lower() == "prod":
+                    logger.info("AccountMonitor: Posting low health account report to Slack")
                     post_low_health_account_report(sorted_accounts, self.config)
+                else:
+                    logger.debug("AccountMonitor: Skipping low health report (ENV=%s, not PROD)", 
+                                self.config.ENV)
                 time.sleep(self.config.LOW_HEALTH_REPORT_INTERVAL)
             except Exception as ex: # pylint: disable=broad-except
                 logger.error("AccountMonitor: Failed to post low health account report: %s", ex,
